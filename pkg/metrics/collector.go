@@ -3,7 +3,6 @@ package metrics
 import (
 	"bufio"
 	"encoding/json"
-	"fmt"
 	"os"
 	"sync"
 )
@@ -94,14 +93,4 @@ func (c *MetricsCollector) AppendNDJSON(path string) error {
 		return err
 	}
 	return nil
-}
-
-func (p *Proxy) Start(duration time.Duration) {
-	if duration > 0 {
-		// ...existing duration logic...
-	} else {
-		if err := p.Start(); err != nil && err != http.ErrServerClosed {
-			fmt.Println("proxy error:", err)
-		}
-	}
 }
