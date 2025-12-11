@@ -1,99 +1,182 @@
 package proxy
 
 import (
+	"context"
 	"fmt"
-	"log"
 	"math/rand"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
+
+	"github.com/syedowais312/chaos-cli/pkg/metrics"
 )
+
+// type ChaosRule struct {
+// 	Path        string
+// 	Method      string
+// 	Delay       time.Duration
+// 	FailureRate float64
+// 	StatusCode  int
+// 	ErrorBody   string
+// }
 
 type ChaosProxy struct {
 	TargetURL *url.URL
 	Port      int
 	Rules     []ChaosRule
-	Proxy     *httputil.ReverseProxy
+	proxy     *httputil.ReverseProxy
+	Metrics   *metrics.MetricsCollector
 	server    *http.Server
 }
 
+// NewChaosProxy creates a configured proxy
 func NewChaosProxy(target string, port int, rules []ChaosRule) (*ChaosProxy, error) {
-	parsedURL, err := url.Parse(target)
+	u, err := url.Parse(target)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse target URL: %v", err)
+		return nil, err
 	}
-
-	rp := httputil.NewSingleHostReverseProxy(parsedURL)
+	rp := httputil.NewSingleHostReverseProxy(u)
 
 	cp := &ChaosProxy{
-		TargetURL: parsedURL,
+		TargetURL: u,
 		Port:      port,
 		Rules:     rules,
-		Proxy:     rp,
+		proxy:     rp,
+		Metrics:   metrics.New(),
 	}
+	// keep default director, but you can override if needed
 	return cp, nil
 }
 
-func (cp *ChaosProxy) findRule(path, method string) *ChaosRule {
+func (cp *ChaosProxy) StartWithCtx(ctx context.Context) error {
+	mux := http.NewServeMux()
+	mux.Handle("/", cp)
+
+	addr := fmt.Sprintf(":%d", cp.Port)
+	cp.server = &http.Server{
+		Addr:    addr,
+		Handler: mux,
+	}
+
+	// run server in goroutine
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- cp.server.ListenAndServe()
+	}()
+
+	// listen for ctx done or signal
+	select {
+	case <-ctx.Done():
+		// shutdown triggered by caller
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		return cp.server.Shutdown(shutdownCtx)
+	case err := <-errCh:
+		// server returned an error
+		return err
+	}
+}
+
+// Start runs until SIGINT or SIGTERM and then dumps metrics to outputFile if set
+func (cp *ChaosProxy) Start() error {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// OS signal handling
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		// wait for signal
+		<-sigCh
+		cancel()
+	}()
+
+	return cp.StartWithCtx(ctx)
+}
+
+// findMatchingRule finds the first matching rule for path+method
+func (cp *ChaosProxy) findMatchingRule(path, method string) *ChaosRule {
 	for i := range cp.Rules {
-		rule := &cp.Rules[i]
-
-		if rule.Path != "" && rule.Path != path {
+		r := &cp.Rules[i]
+		if r.Path != "" && r.Path != path {
 			continue
 		}
-		if rule.Method != "" && rule.Method != method {
+		if r.Method != "" && r.Method != method {
 			continue
 		}
-
-		return rule
+		return r
 	}
 	return nil
 }
 
 func (cp *ChaosProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	rule := cp.findRule(r.URL.Path, r.Method)
-	chaosApplied := "none"
+	start := time.Now()
+	chaosApplied := false
+	chaosType := "none"
+	backendErr := false
 
+	// Check rule
+	rule := cp.findMatchingRule(r.URL.Path, r.Method)
 	if rule != nil {
-		// Apply delay
+		// Delay
 		if rule.Delay > 0 {
-			select {
-			case <-time.After(rule.Delay):
-
-			case <-r.Context().Done():
-				log.Println("Request cancelled while delaying")
-				return
-			}
-
-			chaosApplied = "delay"
-
+			chaosApplied = true
+			chaosType = "delay"
+			time.Sleep(rule.Delay)
 		}
-
-		// Apply random failure
+		// Random fail
 		if rule.FailureRate > 0 && rand.Float64() < rule.FailureRate {
-
-			if rule.StatusCode == 0 {
-				rule.StatusCode = http.StatusInternalServerError
+			chaosApplied = true
+			chaosType = "failure"
+			status := rule.StatusCode
+			if status == 0 {
+				status = http.StatusServiceUnavailable
 			}
-
 			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(rule.StatusCode)
-			_, _ = w.Write([]byte(rule.ErrorBody))
-			log.Printf("[chaos] injected failed response: %d, body: %s", rule.StatusCode, rule.ErrorBody)
-
+			w.WriteHeader(status)
+			if rule.ErrorBody != "" {
+				_, _ = w.Write([]byte(rule.ErrorBody))
+			} else {
+				_, _ = w.Write([]byte(`{"error":"chaos injected"}`))
+			}
+			lat := time.Since(start).Milliseconds()
+			cp.Metrics.RecordRequest(metrics.RequestMetric{
+				Timestamp:    time.Now(),
+				Method:       r.Method,
+				Path:         r.URL.Path,
+				StatusCode:   status,
+				LatencyMs:    lat,
+				ChaosApplied: true,
+				ChaosType:    chaosType,
+				BackendError: false,
+			})
 			return
 		}
 	}
-	w.Header().Set("X-Chaos-Applied", chaosApplied)
-	cp.Proxy.ServeHTTP(w, r)
 
-}
+	// Wrap ResponseWriter to capture status
+	rec := NewStatusRecorder(w)
+	cp.proxy.ServeHTTP(rec, r)
 
-func (cp *ChaosProxy) Start() error {
-	addr := fmt.Sprintf(":%d", cp.Port)
+	// Determine backend error (5xx)
+	if rec.StatusCode >= 500 {
+		backendErr = true
+	}
 
-	fmt.Println("Chaos proxy running at", addr)
-	return http.ListenAndServe(addr, cp)
-
+	lat := time.Since(start).Milliseconds()
+	cp.Metrics.RecordRequest(metrics.RequestMetric{
+		Timestamp:    time.Now(),
+		Method:       r.Method,
+		Path:         r.URL.Path,
+		StatusCode:   rec.StatusCode,
+		LatencyMs:    lat,
+		ChaosApplied: chaosApplied,
+		ChaosType:    chaosType,
+		BackendError: backendErr,
+	})
 }

@@ -1,4 +1,4 @@
-module chaos-cli
+module github.com/syedowais312/chaos-cli
 
 go 1.25.5
 
