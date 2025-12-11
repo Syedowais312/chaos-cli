@@ -1,2 +1,4 @@
-metrics.ndjson
+baseline.json
+experiment.ndjson
+endpoints.json
 *.env
