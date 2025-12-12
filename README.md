@@ -30,14 +30,14 @@ Note: Avoid `go build ./...` as it compiles all packages, including `examples` w
 1) Start a demo backend (port `3000`):
 - `go run examples/demo-server.go`
 
-2) Run a chaos proxy for 5 seconds, injecting 25ms delay and 10% failures on `POST /login`:
+2) Run a chaos proxy for 5 seconds, injecting 25ms delay and 10% failures on `POST /login` (mode: test/experiment):
 - `go run . http proxy --target http://localhost:3000 --port 8080 --delay 25ms --failure-rate 0.1 --path /login --method POST --duration 5s --output experiment.ndjson`
 
 3) Exercise the proxy during the run (in a separate terminal):
 - `curl -X POST http://localhost:8080/login -H "Content-Type: application/json" -d '{"user":"demo"}'`
 - `curl http://localhost:8080/products`
 
-4) Capture a baseline (no chaos):
+4) Capture a baseline (no chaos, mode: record/baseline):
 - `go run . http proxy --target http://localhost:3000 --port 8080 --duration 5s` (defaults to `baseline.ndjson`)
 
 5) Analyze impact (prints text and saves JSON):
@@ -60,11 +60,14 @@ Flags:
 - `--path` string: API path to match (e.g., `/login`).
 - `--method` string: HTTP method to match (`GET`, `POST`, etc.). Empty means any.
 - `--duration` duration: Runtime (e.g., `60s`). `0` means run until Ctrl+C.
-- `--output` string: NDJSON metrics filename (default `baseline.ndjson`).
+  - `--output` string: NDJSON metrics filename.
+    - Default: `baseline.ndjson` in record mode (no chaos).
+    - Default: `experiment.ndjson` in test mode (delay/failure set).
 
 Example:
-- Baseline: `go run . http proxy --target http://localhost:3000 --port 8080 --duration 10s`
-- Experiment: `go run . http proxy --target http://localhost:3000 --port 8080 --delay 100ms --failure-rate 0.2 --path /orders --method GET --duration 10s --output experiment.ndjson`
+- Baseline (record): `go run . http proxy --target http://localhost:3000 --port 8080 --duration 10s`
+- Experiment (test): `go run . http proxy --target http://localhost:3000 --port 8080 --delay 100ms --failure-rate 0.2 --path /orders --method GET --duration 10s --output experiment.ndjson`
+  - Or omit `--output`; it will save to `experiment.ndjson` automatically in test mode.
 
 ### Discover
 Discover API endpoints by observing traffic through a reverse proxy.

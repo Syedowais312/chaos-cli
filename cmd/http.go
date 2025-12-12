@@ -107,6 +107,16 @@ var httpProxyCmd = &cobra.Command{
         fmt.Printf("Starting chaos proxy on :%d -> %s\n", port, target)
         fmt.Printf("Mode: %s (%s)\n", runLabel, runDetail)
 
+        // If user did not specify --output, pick default by mode
+        // record -> baseline.ndjson, test -> experiment.ndjson
+        if !cmd.Flags().Changed("output") {
+            if runLabel == "test" {
+                output = "experiment.ndjson"
+            } else {
+                output = "baseline.ndjson"
+            }
+        }
+
 		// If a duration is provided, run for that long and cancel
 		if duration > 0 {
 			ctx, cancel := context.WithTimeout(context.Background(), duration)
