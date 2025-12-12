@@ -38,10 +38,11 @@ Note: Avoid `go build ./...` as it compiles all packages, including `examples` w
 - `curl http://localhost:8080/products`
 
 4) Capture a baseline (no chaos):
-- `go run . http proxy --target http://localhost:3000 --port 8080 --duration 5s --output baseline.ndjson`
+- `go run . http proxy --target http://localhost:3000 --port 8080 --duration 5s` (defaults to `baseline.ndjson`)
 
 5) Analyze impact (prints text and saves JSON):
-- `go run . http analyze --baseline baseline.ndjson --experiment experiment.ndjson --format both --output impact.report.json`
+- Minimal (auto-loads defaults): `go run . http analyze --format brief`
+- Detailed with JSON: `go run . http analyze --format both --output impact.report.json`
 
 ## Commands
 
@@ -59,10 +60,11 @@ Flags:
 - `--path` string: API path to match (e.g., `/login`).
 - `--method` string: HTTP method to match (`GET`, `POST`, etc.). Empty means any.
 - `--duration` duration: Runtime (e.g., `60s`). `0` means run until Ctrl+C.
-- `--output` string: File to write NDJSON metrics on shutdown.
+- `--output` string: NDJSON metrics filename (default `baseline.ndjson`).
 
 Example:
-- `go run . http proxy --target http://localhost:3000 --port 8080 --delay 100ms --failure-rate 0.2 --path /orders --method GET --duration 10s --output experiment.ndjson`
+- Baseline: `go run . http proxy --target http://localhost:3000 --port 8080 --duration 10s`
+- Experiment: `go run . http proxy --target http://localhost:3000 --port 8080 --delay 100ms --failure-rate 0.2 --path /orders --method GET --duration 10s --output experiment.ndjson`
 
 ### Discover
 Discover API endpoints by observing traffic through a reverse proxy.
@@ -85,11 +87,31 @@ Send traffic through the discovery proxy (port `8081`) while it runs to capture 
 Compare baseline vs experiment metrics and generate an impact report.
 
 Usage:
-- `go run . http analyze --baseline baseline.ndjson --experiment experiment.ndjson --format [text|json|both] --output impact.report.json`
+- Minimal defaults: `go run . http analyze --format [text|brief|json|both]`
+- Explicit files: `go run . http analyze --baseline baseline.ndjson --experiment experiment.ndjson --format [text|brief|json|both] --output impact.report.json`
 
 Output:
 - Text report printed to console.
 - JSON report saved when `--format json` or `--format both`.
+
+## Defaults & File Locations
+
+Chaos CLI uses a default working folder named `chaos-cli-test` under your current directory. It is auto-created when needed. Filenames provided to commands are resolved into this folder.
+
+- Proxy metrics output:
+  - Default filename: `baseline.ndjson` (saved to `chaos-cli-test/baseline.ndjson`).
+  - Override for experiment runs: `--output experiment.ndjson` (saved to `chaos-cli-test/experiment.ndjson`).
+
+- Analyze inputs and outputs:
+  - Baseline: `baseline.ndjson` → `chaos-cli-test/baseline.ndjson`.
+  - Experiment: `experiment.ndjson` → `chaos-cli-test/experiment.ndjson`.
+  - Report: `report.json` → `chaos-cli-test/report.json` (when `--format json` or `both`).
+
+You can still pass custom filenames (e.g., `my-baseline.ndjson`), and they will be read from/written to `chaos-cli-test/` automatically.
+
+Platform notes:
+- Windows (PowerShell): run local executables with `./` prefix, e.g., `./chaos-cli.exe http analyze --format brief`.
+- macOS/Linux: run with `./chaos-cli http analyze --format brief`.
 
 ## Demo Server
 

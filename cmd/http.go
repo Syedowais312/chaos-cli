@@ -52,18 +52,19 @@ func init() {
 	httpProxyCmd.Flags().StringVar(&rulePath, "path", "/", "API path to match")
 	httpProxyCmd.Flags().StringVar(&ruleMethod, "method", "", "HTTP method (GET, POST, etc.)")
 	httpProxyCmd.Flags().DurationVar(&duration, "duration", 0, "Duration to run proxy (e.g., 60s). 0 means run until Ctrl+C")
-	httpProxyCmd.Flags().StringVar(&output, "output", "", "File to write NDJSON metrics on shutdown")
+    // Default metrics filename will be resolved into chaos-cli-test folder
+    httpProxyCmd.Flags().StringVar(&output, "output", "baseline.ndjson", "NDJSON metrics filename (default: chaos-cli-test/baseline.ndjson)")
 }
 
 var httpProxyCmd = &cobra.Command{
-	Use:   "proxy",
-	Short: "Start HTTP chaos proxy",
-	Run: func(cmd *cobra.Command, args []string) {
-		// normalize method
-		method := strings.ToUpper(strings.TrimSpace(ruleMethod))
-		if method == "" {
-			method = "" // empty means match any method (depends on your matching logic)
-		}
+    Use:   "proxy",
+    Short: "Start HTTP chaos proxy",
+    Run: func(cmd *cobra.Command, args []string) {
+        // normalize method
+        method := strings.ToUpper(strings.TrimSpace(ruleMethod))
+        if method == "" {
+            method = "" // empty means match any method (depends on your matching logic)
+        }
 
 		// Build rules from flags (you can extend to accept multiple rules)
 		rules := []proxy.ChaosRule{
@@ -84,8 +85,27 @@ var httpProxyCmd = &cobra.Command{
 			return
 		}
 
-		// Helpful startup log so users know it is running
-		fmt.Printf("Starting chaos proxy on :%d -> %s\n", port, target)
+        // Determine run label: baseline (record) vs experiment (test)
+        runLabel := "record"
+        runDetail := "baseline"
+        if delay > 0 || failureRate > 0 {
+            runLabel = "test"
+            runDetail = "experiment"
+        } else {
+            // also infer from output filename when provided
+            low := strings.ToLower(strings.TrimSpace(output))
+            if strings.Contains(low, "experiment") {
+                runLabel = "test"
+                runDetail = "experiment"
+            } else if strings.Contains(low, "baseline") {
+                runLabel = "record"
+                runDetail = "baseline"
+            }
+        }
+
+        // Helpful startup logs so users know it is running
+        fmt.Printf("Starting chaos proxy on :%d -> %s\n", port, target)
+        fmt.Printf("Mode: %s (%s)\n", runLabel, runDetail)
 
 		// If a duration is provided, run for that long and cancel
 		if duration > 0 {
@@ -109,12 +129,12 @@ var httpProxyCmd = &cobra.Command{
 		}
 
 		// At this point proxy was stopped; dump metrics
-		fmt.Println("Proxy stopped; preparing metrics output...")
-
-		if output == "" {
-			fmt.Println("No output file provided; skipping metrics write.")
-			return
-		}
+        fmt.Println("Proxy stopped; preparing metrics output...")
+        
+        if output == "" {
+            fmt.Println("No output file provided; skipping metrics write.")
+            return
+        }
 		outputPath, err := utils.ResolveOutputPath(output)
 		if err != nil {
 			fmt.Println("Failed to resolve output path:", err)

@@ -9,6 +9,7 @@ import (
 
     "github.com/spf13/cobra"
     "github.com/syedowais312/chaos-cli/pkg/analyze"
+    "github.com/syedowais312/chaos-cli/pkg/utils"
 )
 
 var analyzeCmd = &cobra.Command{
@@ -28,24 +29,32 @@ var (
 func init() {
     httpCmd.AddCommand(analyzeCmd)
 
-    analyzeCmd.Flags().StringVar(&baselineFile, "baseline", "", "Baseline metrics file (required)")
-    analyzeCmd.Flags().StringVar(&experimentFile, "experiment", "", "Experiment metrics file (required)")
-    analyzeCmd.Flags().StringVar(&outputFile, "output", "report.json", "Output report file")
-    analyzeCmd.Flags().StringVar(&outputFormat, "format", "text", "Output format: text, json, or both")
-
-    analyzeCmd.MarkFlagRequired("baseline")
-    analyzeCmd.MarkFlagRequired("experiment")
+    // Defaults to files inside chaos-cli-test folder
+    analyzeCmd.Flags().StringVar(&baselineFile, "baseline", "baseline.ndjson", "Baseline metrics filename (default: chaos-cli-test/baseline.ndjson)")
+    analyzeCmd.Flags().StringVar(&experimentFile, "experiment", "experiment.ndjson", "Experiment metrics filename (default: chaos-cli-test/experiment.ndjson)")
+    analyzeCmd.Flags().StringVar(&outputFile, "output", "report.json", "Output report filename (default: chaos-cli-test/report.json)")
+    analyzeCmd.Flags().StringVar(&outputFormat, "format", "text", "Output format: text, brief, json, or both")
 }
 
 func runAnalyze(cmd *cobra.Command, args []string) {
+    // Resolve paths into chaos-cli-test folder (creates it if missing)
+    baselinePath, err := utils.ResolveOutputPath(baselineFile)
+    if err != nil {
+        log.Fatalf("Failed to resolve baseline path: %v", err)
+    }
+    experimentPath, err := utils.ResolveOutputPath(experimentFile)
+    if err != nil {
+        log.Fatalf("Failed to resolve experiment path: %v", err)
+    }
+
     // Load baseline metrics
-    baselineMetrics, err := loadMetrics(baselineFile)
+    baselineMetrics, err := loadMetrics(baselinePath)
     if err != nil {
         log.Fatalf("Failed to load baseline: %v", err)
     }
 
     // Load experiment metrics
-    experimentMetrics, err := loadMetrics(experimentFile)
+    experimentMetrics, err := loadMetrics(experimentPath)
     if err != nil {
         log.Fatalf("Failed to load experiment: %v", err)
     }
@@ -62,23 +71,34 @@ func runAnalyze(cmd *cobra.Command, args []string) {
     // Output based on format
     switch outputFormat {
     case "json":
-        if err := analyze.WriteJSONReport(report, outputFile); err != nil {
+        outPath, err := utils.ResolveOutputPath(outputFile)
+        if err != nil {
+            log.Fatalf("Failed to resolve output path: %v", err)
+        }
+        if err := analyze.WriteJSONReport(report, outPath); err != nil {
             log.Fatalf("Failed to write JSON report: %v", err)
         }
-        fmt.Printf("JSON report saved to %s\n", outputFile)
+        fmt.Printf("JSON report saved to %s\n", outPath)
 
     case "text":
         analyze.PrintTextReport(report)
 
+    case "brief":
+        analyze.PrintBriefReport(report)
+
     case "both":
         analyze.PrintTextReport(report)
-        if err := analyze.WriteJSONReport(report, outputFile); err != nil {
+        outPath, err := utils.ResolveOutputPath(outputFile)
+        if err != nil {
+            log.Fatalf("Failed to resolve output path: %v", err)
+        }
+        if err := analyze.WriteJSONReport(report, outPath); err != nil {
             log.Fatalf("Failed to write JSON report: %v", err)
         }
-        fmt.Printf("JSON report saved to %s\n", outputFile)
+        fmt.Printf("JSON report saved to %s\n", outPath)
 
     default:
-        log.Fatalf("Unknown format: %s (use 'text', 'json', or 'both')", outputFormat)
+        log.Fatalf("Unknown format: %s (use 'text', 'brief', 'json', or 'both')", outputFormat)
     }
 }
 

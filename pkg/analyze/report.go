@@ -1,10 +1,10 @@
 package analyze
 
 import (
-	"encoding/json"
-	"fmt"
-	"os"
-	"strings"
+    "encoding/json"
+    "fmt"
+    "os"
+    "strings"
 )
 
 // WriteJSONReport writes the report as JSON
@@ -130,4 +130,72 @@ func PrintTextReport(report ImpactReport) {
 		fmt.Println("  - Add timeouts to prevent hanging requests")
 		fmt.Println()
 	}
+}
+
+// PrintBriefReport prints a concise one-screen summary
+func PrintBriefReport(report ImpactReport) {
+    // Header
+    fmt.Printf("Chaos: %s\n", report.ChaosDescription)
+
+    // Summary counts
+    fmt.Printf("Endpoints: total=%d, direct=%d, critical=%d, major=%d, minor=%d, unaffected=%d, hidden=%d\n",
+        report.Summary.TotalEndpoints,
+        report.Summary.DirectlyAffected,
+        report.Summary.CriticalImpact,
+        report.Summary.MajorImpact,
+        report.Summary.MinorImpact,
+        report.Summary.Unaffected,
+        report.Summary.HiddenDependencies,
+    )
+
+    // Top impacted endpoints (combine direct + critical + major)
+    type item struct {
+        method string
+        path   string
+        latDD  float64
+        srDD   float64
+        label  string
+    }
+
+    var top []item
+    for _, comp := range report.DirectlyAffected {
+        top = append(top, item{comp.Method, comp.Path, comp.AvgLatencyDelta, comp.SuccessRateDelta, "direct"})
+    }
+    for _, comp := range report.CriticalImpact {
+        top = append(top, item{comp.Method, comp.Path, comp.AvgLatencyDelta, comp.SuccessRateDelta, "critical"})
+    }
+    for _, comp := range report.MajorImpact {
+        top = append(top, item{comp.Method, comp.Path, comp.AvgLatencyDelta, comp.SuccessRateDelta, "major"})
+    }
+
+    // Sort by absolute latency delta descending (simple scoring)
+    for i := 0; i < len(top); i++ {
+        for j := i + 1; j < len(top); j++ {
+            if abs(top[j].latDD) > abs(top[i].latDD) {
+                top[i], top[j] = top[j], top[i]
+            }
+        }
+    }
+
+    // Print top 3
+    n := 3
+    if len(top) < n {
+        n = len(top)
+    }
+    if n > 0 {
+        fmt.Println("Top impacted:")
+        for i := 0; i < n; i++ {
+            it := top[i]
+            fmt.Printf("- [%s] %s %s | dLatency=%+.0fms, dSuccess=%+.1fpp\n", it.label, it.method, it.path, it.latDD, it.srDD)
+        }
+    } else {
+        fmt.Println("Top impacted: none")
+    }
+}
+
+func abs(v float64) float64 {
+    if v < 0 {
+        return -v
+    }
+    return v
 }
