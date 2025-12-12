@@ -15,8 +15,13 @@ Prerequisites:
 Clone and use directly without installation:
 - Run commands via `go run .` to avoid building example binaries.
 
-To build the CLI binary only:
-- `go build -o chaos-cli .`
+Build the CLI binary (platform-specific):
+- Windows (PowerShell):
+  - `go build -o chaos-cli.exe .`
+  - Run local executable with `.\/chaos-cli.exe ...` (PowerShell requires the `.` prefix for local files)
+- macOS/Linux:
+  - `go build -o chaos-cli .`
+  - Run with `./chaos-cli ...`
 
 Note: Avoid `go build ./...` as it compiles all packages, including `examples` with multiple `main` functions, which will fail.
 
