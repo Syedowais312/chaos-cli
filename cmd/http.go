@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/syedowais312/chaos-cli/pkg/proxy"
+	"github.com/syedowais312/chaos-cli/pkg/utils"
 
 	"github.com/spf13/cobra"
 )
@@ -41,8 +42,8 @@ var httpCmd = &cobra.Command{
 }
 
 func init() {
-    rootCmd.AddCommand(httpCmd)
-    httpCmd.AddCommand(httpProxyCmd)
+	rootCmd.AddCommand(httpCmd)
+	httpCmd.AddCommand(httpProxyCmd)
 
 	httpProxyCmd.Flags().StringVar(&target, "target", "http://localhost:3000", "Target server to proxy to")
 	httpProxyCmd.Flags().IntVar(&port, "port", 8080, "Port to run the chaos proxy on")
@@ -55,14 +56,14 @@ func init() {
 }
 
 var httpProxyCmd = &cobra.Command{
-    Use:   "proxy",
-    Short: "Start HTTP chaos proxy",
-    Run: func(cmd *cobra.Command, args []string) {
-        // normalize method
-        method := strings.ToUpper(strings.TrimSpace(ruleMethod))
-        if method == "" {
-            method = "" // empty means match any method (depends on your matching logic)
-        }
+	Use:   "proxy",
+	Short: "Start HTTP chaos proxy",
+	Run: func(cmd *cobra.Command, args []string) {
+		// normalize method
+		method := strings.ToUpper(strings.TrimSpace(ruleMethod))
+		if method == "" {
+			method = "" // empty means match any method (depends on your matching logic)
+		}
 
 		// Build rules from flags (you can extend to accept multiple rules)
 		rules := []proxy.ChaosRule{
@@ -77,46 +78,55 @@ var httpProxyCmd = &cobra.Command{
 			},
 		}
 
-        p, err := proxy.NewChaosProxy(target, port, rules)
-        if err != nil {
-            fmt.Println("error:", err)
-            return
-        }
+		p, err := proxy.NewChaosProxy(target, port, rules)
+		if err != nil {
+			fmt.Println("error:", err)
+			return
+		}
 
-        // Helpful startup log so users know it is running
-        fmt.Printf("Starting chaos proxy on :%d -> %s\n", port, target)
+		// Helpful startup log so users know it is running
+		fmt.Printf("Starting chaos proxy on :%d -> %s\n", port, target)
 
-        // If a duration is provided, run for that long and cancel
-        if duration > 0 {
-            ctx, cancel := context.WithTimeout(context.Background(), duration)
-            defer cancel()
+		// If a duration is provided, run for that long and cancel
+		if duration > 0 {
+			ctx, cancel := context.WithTimeout(context.Background(), duration)
+			defer cancel()
 
-            go func() {
-                // p.StartWithCtx is assumed to exist in your proxy package.
-                // If it is named differently, update accordingly.
-                if err := p.StartWithCtx(ctx); err != nil && err != http.ErrServerClosed {
-                    fmt.Println("proxy error:", err)
-                }
-            }()
+			go func() {
+				// p.StartWithCtx is assumed to exist in your proxy package.
+				// If it is named differently, update accordingly.
+				if err := p.StartWithCtx(ctx); err != nil && err != http.ErrServerClosed {
+					fmt.Println("proxy error:", err)
+				}
+			}()
 
-            <-ctx.Done()
-        } else {
-            // Block until the proxy stops (Start handles signals internally)
-            if err := p.Start(); err != nil && err != http.ErrServerClosed {
-                fmt.Println("proxy error:", err)
-            }
-        }
+			<-ctx.Done()
+		} else {
+			// Block until the proxy stops (Start handles signals internally)
+			if err := p.Start(); err != nil && err != http.ErrServerClosed {
+				fmt.Println("proxy error:", err)
+			}
+		}
 
-        // At this point proxy was stopped; dump metrics
-        fmt.Println("Proxy stopped; preparing metrics output...")
-        if output != "" {
-            if err := p.Metrics.WriteNDJSON(output); err != nil {
-                fmt.Println("failed to write metrics:", err)
-            } else {
-                fmt.Println("metrics written to", output)
-            }
-        } else {
-            fmt.Println("no output file provided; metrics kept in memory")
-        }
-    },
+		// At this point proxy was stopped; dump metrics
+		fmt.Println("Proxy stopped; preparing metrics output...")
+
+		if output == "" {
+			fmt.Println("No output file provided; skipping metrics write.")
+			return
+		}
+		outputPath, err := utils.ResolveOutputPath(output)
+		if err != nil {
+			fmt.Println("Failed to resolve output path:", err)
+			return
+		}
+		fmt.Println("Resolved output path:", outputPath)
+
+		if err := p.Metrics.WriteNDJSON(outputPath); err != nil {
+			fmt.Println("Failed to write metrics:", err)
+		} else {
+			fmt.Println("Metrics written to", outputPath)
+		}
+
+	},
 }
