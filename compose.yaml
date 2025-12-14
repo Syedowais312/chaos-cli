@@ -1,0 +1,20 @@
+services:
+  go-chaos-tool:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: go-chaos-tool:latest
+    container_name: go-chaos-tool
+    restart: unless-stopped
+    init: true
+    # env_file: ./.env  # Uncomment if .env file exists
+    ports:
+      - "8080:8080"  # Exposed in Dockerfile, adjust if needed
+    networks:
+      - chaos-net
+    # volumes: []  # No persistent volumes required for this service
+    # Add depends_on if you add external services below
+
+networks:
+  chaos-net:
+    driver: bridge

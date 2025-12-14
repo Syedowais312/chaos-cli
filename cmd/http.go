@@ -35,9 +35,9 @@ var (
 var httpCmd = &cobra.Command{
 	Use:   "http",
 	Short: "HTTP commands for chaos proxy",
-	Long: `HTTP subcommands for the chaos-cli. Examples:
+	Long: `HTTP subcommands for the chaos-tool. Examples:
 
-  chaos-cli http proxy --target http://localhost:3000 --path /login --method POST --delay 2s --failure-rate 0.2
+  chaos-tool http proxy --target http://localhost:3000 --path /login --method POST --delay 2s --failure-rate 0.2
 `,
 }
 

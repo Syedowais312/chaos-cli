@@ -1,0 +1,19 @@
+FROM golang:1.25.5-alpine AS builder
+
+
+WORKDIR /app
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+RUN go build -o chaos-tool
+
+FROM alpine:latest
+
+WORKDIR /app
+
+COPY --from=builder /app/chaos-tool .
+
+ENTRYPOINT ["./chaos-tool"]

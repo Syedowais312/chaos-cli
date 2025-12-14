@@ -1,0 +1,79 @@
+# Version control
+.git/
+.gitignore
+.svn/
+.hg/
+
+# Go-specific
+/vendor/
+*.test
+.go-cache/
+
+# Build outputs and binaries
+*.exe
+*.out
+*.bin
+dist/
+build/
+out/
+
+# Test files
+*_test.go
+test/
+tests/
+debug/
+*.log
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment and secrets
+.env*
+*.env
+*.pem
+*.key
+*.crt
+config.local.*
+*.local.yml
+.local/
+local/
+
+# Documentation and examples
+docs/
+*.md
+README*
+examples/
+LICENSE
+
+# Docker and compose files
+Dockerfile*
+docker-compose*
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Project-specific data
+chaos-cli.exe
+chaos-cli-test/
+
+# Node.js (for completeness, not detected)
+node_modules/
+npm-debug.log
+yarn-debug.log
+
+# Python (for completeness, not detected)
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.coverage
+
+# Java (for completeness, not detected)
+target/
+*.class
+.gradle/

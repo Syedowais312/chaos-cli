@@ -155,6 +155,17 @@ Each line in metrics files is a JSON object with:
   - Run `analyze` to compare and inspect the impact.
   - Use `discover` to capture endpoint inventory.
 
+
+
+
+   docker run --rm -p 8080:8080 `
+-v "${PWD}\chaos-cli-test:/app/chaos-cli-test" `                                               
+   chaos-tool http proxy `
+   --target=http://host.docker.internal:3000 `
+   --port=8080 `
+   --delay=2s `
+   --output=experiment.ndjson
+
 ## License
 
 This project is licensed under the terms specified in `LICENSE`.
